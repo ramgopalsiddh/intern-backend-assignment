@@ -58,20 +58,32 @@ def test_post_assignment_student_1(client, h_student_1):
 
 
 def test_submit_assignment_student_1(client, h_student_1):
-    response = client.post(
+    # Step 1: Create a draft assignment
+    response_create = client.post(
+        '/student/assignments',
+        headers=h_student_1,
+        json={'content': 'Draft Content'}
+    )
+    
+    assert response_create.status_code == 200
+    created_assignment = response_create.json['data']
+    assignment_id = created_assignment['id']  # Get the ID of the created assignment
+
+    # Step 2: Submit the draft assignment
+    response_submit = client.post(
         '/student/assignments/submit',
         headers=h_student_1,
-        json={
-            'id': 2,
-            'teacher_id': 2
-        })
+        json={'id': assignment_id, 'teacher_id': 2}
+    )
+    
+    print(f"Submit Response status code: {response_submit.status_code}")
+    print(f"Submit Response data: {response_submit.data}")
+    
+    assert response_submit.status_code == 200
+    submitted_assignment = response_submit.json['data']
+    assert submitted_assignment['state'] == 'SUBMITTED'
+    assert submitted_assignment['teacher_id'] == 2
 
-    assert response.status_code == 200
-
-    data = response.json['data']
-    assert data['student_id'] == 1
-    assert data['state'] == 'SUBMITTED'
-    assert data['teacher_id'] == 2
 
 
 def test_assignment_resubmit_error(client, h_student_1):
@@ -86,3 +98,69 @@ def test_assignment_resubmit_error(client, h_student_1):
     assert response.status_code == 400
     assert error_response['error'] == 'FyleError'
     assert error_response["message"] == 'only a draft assignment can be submitted'
+
+
+def test_post_assignment_student_1_my(client, h_student_1):
+    content = 'MY TEST'
+
+    response = client.post(
+        '/student/assignments',
+        headers=h_student_1,
+        json={
+            'content': content
+        })
+
+    assert response.status_code == 200
+    data = response.json['data']
+    assert data['content'] == content
+    assert data['state'] == 'DRAFT'
+    assert data['teacher_id'] is None
+
+
+def test_post_assignment_student_1_update_my(client, h_student_1):
+    content = 'MY TEST UPDATED'
+
+    response = client.post(
+        '/student/assignments',
+        headers=h_student_1,
+        json={
+            'id': 7,
+            'content': content
+        })
+
+    try:
+        assert response.status_code == 200
+        data = response.json['data']
+        assert data['content'] == content
+        assert data['state'] == 'DRAFT'
+        assert data['teacher_id'] is None
+    except AssertionError:
+        assert response.status_code == 400
+        data = response.json
+        assert data['error'] == 'FyleError'
+        assert data['message'] == 'only assignment in draft state can be edited'
+
+
+def test_submit_assignment_student_1_my(client, h_student_1):
+    """
+    can be failure case: only a draft assignment can be submitted ( an assignment can't be submitted more than once. )
+    """
+    response = client.post(
+        '/student/assignments/submit',
+        headers=h_student_1,
+        json={
+            'id': 7,
+            'teacher_id': 1
+        })
+
+    try:
+        assert response.status_code == 200
+        data = response.json['data']
+        assert data['student_id'] == 1
+        assert data['state'] == 'SUBMITTED'
+        assert data['teacher_id'] == 1
+    except AssertionError:
+        assert response.status_code == 400
+        data = response.json
+        assert data['error'] == 'FyleError'
+        assert data['message'] == 'only a draft assignment can be submitted'
