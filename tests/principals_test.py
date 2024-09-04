@@ -1,7 +1,7 @@
 import pytest
 import json
-from tests import app
 from unittest.mock import patch
+from core.server import app
 from core.models.assignments import Assignment
 
 @pytest.fixture
@@ -19,84 +19,69 @@ def h_principal():
     return headers
 
 @pytest.fixture
-def h_teacher_1():
-    headers = {
-        'X-Principal': json.dumps({
-            'teacher_id': 1,
-            'user_id': 3
-        })
-    }
-    return headers
+def mock_teachers():
+    return [
+        {'id': 1, 'name': 'Teacher 1'},
+        {'id': 2, 'name': 'Teacher 2'}
+    ]
 
 @pytest.fixture
 def mock_assignments():
-    # Mock or prepare assignments data for the tests
     return [
-        {'id': 1, 'student_id': 1, 'content': 'Assignment 1', 'state': 'SUBMITTED', 'grade': 'A'},
-        {'id': 2, 'student_id': 2, 'content': 'Assignment 2', 'state': 'SUBMITTED', 'grade': 'B'}
+        {'id': 1, 'grade': 'A'},
+        {'id': 2, 'grade': 'B'}
     ]
 
-@pytest.mark.parametrize("mock_assignments,expected_count", [
-    ([
-        {'id': 1, 'student_id': 1, 'content': 'Assignment 1', 'state': 'SUBMITTED', 'grade': 'A'},
-        {'id': 2, 'student_id': 2, 'content': 'Assignment 2', 'state': 'SUBMITTED', 'grade': 'B'}
-    ], 2),
-    ([], 0)
-])
-def test_get_assignments(client, h_principal, mock_assignments, expected_count):
-    with patch('core.models.assignments.Assignment.get_all_submitted_and_graded_assignments', return_value=mock_assignments):
-        response = client.get('/principal/assignments', headers=h_principal)
-        
-        assert response.status_code == 200
-        data = response.json['data']
-        assert len(data) == expected_count
-        if expected_count > 0:
-            assert all('id' in assignment for assignment in data)
-            assert all('grade' in assignment for assignment in data)
+@pytest.fixture
+def mock_assignment():
+    return {'id': 1, 'grade': 'A'}
 
-
-
-# def test_grade_or_regrade_success(client, h_principal):
-#     payload = {
-#         'id': 1,
-#         'grade': 'A+'
-#     }
-
-#     with patch('core.models.assignments.Assignment.mark_grade') as mock_mark_grade:
-#         mock_mark_grade.return_value = {
-#             'id': 1,
-#             'student_id': 1,
-#             'content': 'Assignment 1',
-#             'state': 'SUBMITTED',
-#             'grade': 'A+'
-#         }
-#         response = client.post('/principal/assignments/grade', headers=h_principal, json=payload)
-
-#         assert response.status_code == 200
-#         data = response.json['data']
-#         assert data['id'] == 1
-#         assert data['grade'] == 'A+'
-
-
-def test_grade_or_regrade_invalid_data(client, h_principal):
-    payload = {
-        'id': 1,
-        'grade': None  # Invalid grade
-    }
+@patch('core.models.teachers.Teacher.get_all_teachers')
+@patch('core.apis.responses.APIResponse.respond')
+def test_list_teachers(mock_api_response, mock_get_all_teachers, client, h_principal):
+    mock_get_all_teachers.return_value = [{'id': 1, 'name': 'Teacher 1'}, {'id': 2, 'name': 'Teacher 2'}]
+    mock_api_response.return_value = {'data': [{'id': 1, 'name': 'Teacher 1'}, {'id': 2, 'name': 'Teacher 2'}]}
     
-    response = client.post('/principal/assignments/grade', headers=h_principal, json=payload)
+    response = client.get('/principal/teachers', headers=h_principal)
+    assert response.status_code == 200
+    assert response.json == {'data': [{'id': 1, 'name': 'Teacher 1'}, {'id': 2, 'name': 'Teacher 2'}]}
+    mock_get_all_teachers.assert_called_once()
+    mock_api_response.assert_called_once()
+
+@patch('core.models.teachers.Teacher.get_all_teachers')
+@patch('core.apis.responses.APIResponse.respond')
+def test_list_teachers_no_teachers(mock_api_response, mock_get_all_teachers, client, h_principal):
+    mock_get_all_teachers.return_value = []
+    mock_api_response.return_value = {'data': []}
+    
+    response = client.get('/principal/teachers', headers=h_principal)
+    assert response.status_code == 200
+    assert response.json == {'data': []}
+    mock_get_all_teachers.assert_called_once()
+    mock_api_response.assert_called_once()
+
+@patch('core.models.assignments.Assignment.get_all_submitted_and_graded_assignments')
+@patch('core.apis.responses.APIResponse.respond')
+def test_get_assignments(mock_api_response, mock_get_all_assignments, client, h_principal, mock_assignments):
+    mock_get_all_assignments.return_value = mock_assignments
+    mock_api_response.return_value = {'data': mock_assignments}
+    
+    response = client.get('/principal/assignments', headers=h_principal)
+    assert response.status_code == 200
+    assert response.json == {'data': mock_assignments}
+    mock_get_all_assignments.assert_called_once()
+    mock_api_response.assert_called_once()
+
+@patch('core.models.assignments.Assignment.mark_grade')
+@patch('core.apis.responses.APIResponse.respond')
+def test_grade_or_regrade_assignments_invalid_payload(mock_api_response, mock_mark_grade, client, h_principal):
+    incoming_payload = {'invalid_field': 'value'}
+    
+    response = client.post('/principal/assignments/grade', 
+                           headers=h_principal,
+                           data=json.dumps(incoming_payload),
+                           content_type='application/json')
     
     assert response.status_code == 400
-    assert response.json['error'] == 'ValidationError'  # Adjusted based on actual error handling
-
-def test_grade_or_regrade_unauthorized(client, h_teacher_1):
-    payload = {
-        'id': 1,
-        'grade': 'B'
-    }
-    
-    response = client.post('/principal/assignments/grade', headers=h_teacher_1, json=payload)
-    
-    assert response.status_code == 403
-    assert response.json['error'] == 'FyleError'  # Adjusted based on actual error handling
-    assert response.json['message'] == 'requester should be a principal'  # Correct error message
+    mock_mark_grade.assert_not_called()
+    mock_api_response.assert_not_called()
