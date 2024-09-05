@@ -85,3 +85,37 @@ def test_grade_or_regrade_assignments_invalid_payload(mock_api_response, mock_ma
     assert response.status_code == 400
     mock_mark_grade.assert_not_called()
     mock_api_response.assert_not_called()
+
+def test_get_assignments(client, h_principal):
+    """Test GET /assignments"""
+    
+    with patch('core.models.assignments.Assignment.get_all_submitted_and_graded_assignments') as mock_get_all:
+        mock_get_all.return_value = [Assignment(id=1, student_id=1, teacher_id=1, state='SUBMITTED')]
+
+        response = client.get('/principal/assignments', headers=h_principal)
+        assert response.status_code == 200
+        assert len(response.json['data']) == 1
+        assert response.json['data'][0]['id'] == 1
+
+
+def test_grade_or_regrade_assignments(client, h_principal):
+    """Test POST /assignments/grade (grading or regrading)"""
+    
+    # Prepare payload for grading an assignment
+    payload = {
+        'id': 1,
+        'grade': 'A'
+    }
+
+    with patch('core.models.assignments.Assignment.mark_grade') as mock_mark_grade:
+        mock_assignment = Assignment(id=1, student_id=1, teacher_id=1, state='SUBMITTED', grade='A')
+        mock_mark_grade.return_value = mock_assignment
+
+        response = client.post('/principal/assignments/grade', 
+                               data=json.dumps(payload), 
+                               content_type='application/json',
+                               headers=h_principal)
+        
+        assert response.status_code == 200
+        assert response.json['data']['id'] == 1
+        assert response.json['data']['grade'] == 'A'
