@@ -3,6 +3,10 @@
 <img src="screenshots/Screenshot from 2024-09-05 21-16-16.png" />
 
 
+### To run the Docker containers, use the following commands
+- Build the Docker images: `docker-compose build`
+- Start the Docker containers: `docker-compose up`
+
 # Fyle Backend Challenge
 
 ## Who is this for?
