@@ -1,3 +1,8 @@
+## I solved the assignment problem, achieved 98% test coverage, and created a Docker setup.
+
+<img src="screenshots/Screenshot from 2024-09-05 21-16-16.png" />
+
+
 # Fyle Backend Challenge
 
 ## Who is this for?
